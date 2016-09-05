@@ -13,6 +13,7 @@ from translator_auth import OAuth
 from translator_recorder import TranslateRecorder
 
 def get_wave_header():
+    #copy from demo code, create a header format for wave to upload
     nchannels = 1
     bytes_per_sample = 2
     frame_rate = 16000
@@ -42,29 +43,29 @@ def get_wave_header():
 class TranslateHandler:
     def __init__(self, t_frame, c_id, c_secret):
         self.t_frame = t_frame
+        # prepare token for each group of query
         self.token_generator = OAuth(c_id, c_secret)
         self.is_recording = False
         self.recorder = TranslateRecorder()
+        self.headdata = get_wave_header()
 
     def on_open(self, ws):
         print 'Connected. Server generated request ID = ', ws.sock.headers['x-requestid']
         def run(*args):
             """Background task which streams audio."""
-            headdata = get_wave_header()
-            ws.send(headdata, websocket.ABNF.OPCODE_BINARY)
+            ws.send(self.headdata, websocket.ABNF.OPCODE_BINARY)
             self.recorder.start()
             print 'You can test your speak now'
             # Stream audio one chunk at a time
             while self.is_recording:
-                #sys.stdout.write('.')
                 data = self.recorder.pop_chunk()
                 if (data <> None):
                     #sys.stdout.write('.')
                     ws.send(data, websocket.ABNF.OPCODE_BINARY)
                 time.sleep(0.02)
             ws.keep_running = False;
-            #ws.close()
             self.recorder.halt()
+            # main fram start button now is clickable
             self.t_frame.start_button.configure(state=NORMAL)
             print 'Background thread terminating...'
         
@@ -76,7 +77,9 @@ class TranslateHandler:
     def on_data(self, ws, message, message_type, fin):
         if message_type == websocket.ABNF.OPCODE_TEXT:
             data = json.loads(message)
+            # debug info
             print '\n', message, '\n'
+            # send writing translate text message to main frame
             if (data['type'] == 'final'):
                 self.t_frame.insert_final(data['recognition'], data['translation'])
                 
@@ -84,6 +87,7 @@ class TranslateHandler:
         print error
 
     def try_start_record(self):
+        # start a new thread to record (when record button clicked at main frame)
         def start_record(*args):
             self.is_recording = True
             self.client_trace_id = str(uuid.uuid4())
@@ -103,6 +107,7 @@ class TranslateHandler:
                 on_error=self.on_error,
                 on_close=self.on_close
             )
+            # main frame end record button now is clickable
             self.t_frame.end_button.configure(state=NORMAL)
             self.ws_client.run_forever()
         thread.start_new_thread(start_record, ())
